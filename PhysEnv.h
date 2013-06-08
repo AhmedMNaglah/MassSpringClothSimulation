@@ -100,6 +100,7 @@ public:
 	void LoadData(FILE *fp);
 	void SaveData(FILE *fp);
 	void AddCollisionSphere();
+
 	BOOL				m_UseGravity;			// SHOULD GRAVITY BE ADDED IN
 	BOOL				m_UseDamping;			// SHOULD DAMPING BE ON
 	BOOL				m_UserForceActive;		// WHEN USER FORCE IS APPLIED
@@ -141,6 +142,12 @@ private:
 	int                 m_MaxIterationsCount;
 	float               m_RelativeError;
 	
+	double m_AdaptiveErrorThreshold;
+	double m_DeltaTimeAdaptive;
+	double m_AdaptiveDecreaseStepFactor;
+	double m_AdaptiveIncreaseStepFactor;
+	BOOL m_AdaptiveFlag;
+	
 	float               m_Step;
 	
 // Operations
@@ -158,6 +165,7 @@ private:
 	void	ResolveCollisions( tParticle	*system );
 	void	CompareBuffer(int size, float *buffer,float x, float y);
 	void    Copy(tParticle* source,tParticle* destination);
+	double	ErrorCalc (tParticle	*System1, tParticle	*System2);
 // Implementation
 public:
 	virtual ~CPhysEnv();

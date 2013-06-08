@@ -100,6 +100,14 @@ CPhysEnv::CPhysEnv()
 	m_MaxIterationsCount = 5;
 	m_firstRun=true;
 	m_Step = 0.01;
+
+	m_AdaptiveErrorThreshold = 0.005;
+	m_DeltaTimeAdaptive = 0.1;
+	m_AdaptiveDecreaseStepFactor = 0.25;
+	m_AdaptiveIncreaseStepFactor = 0.2;
+	m_AdaptiveFlag = FALSE;
+
+
 }
 
 CPhysEnv::~CPhysEnv()
@@ -123,6 +131,20 @@ CPhysEnv::~CPhysEnv()
 	free(m_Sphere);
 }
 
+double CPhysEnv::ErrorCalc (tParticle	* System1, tParticle	* System2)
+{
+	double Error =0;
+	for (int i = 0; i< m_ParticleCnt ; i++)
+	{
+	Error = Error + sqrt (pow (System1-> pos.x - System2 ->pos.x , 2)+pow (System1-> pos.y - System2 ->pos.y , 2)+pow (System1-> pos.z - System2 ->pos.z , 2)) ;
+	}
+	System1 ++;
+	System2 ++;
+	Error = Error / m_ParticleCnt;
+	std::ofstream log("log.txt", std::ios_base::app);
+	log << "\n    ErrorCalc: " << Error;
+	return Error;
+}
 void CPhysEnv::RenderWorld()
 {
 	tParticle	*tempParticle;
@@ -1138,109 +1160,23 @@ void CPhysEnv::Copy(tParticle* source,tParticle* destination)
 ///////////////////////////////////////////////////////////////////////////////
 void CPhysEnv::RK4AdaptiveIntegrate( float DeltaTime)  
 {
-	if(m_firstRun)
-		m_Step = DeltaTime;
-	//
-	//  RK (DeltaTime)
-	//
-	
-	//float currentX=0;
+	std::ofstream log("log.txt", std::ios_base::app);
+	log << "\n   DeltaTimeAdaptive !!! " << m_DeltaTimeAdaptive;
+	if (m_AdaptiveFlag == FALSE)	
+	{
+	m_DeltaTimeAdaptive = DeltaTime;
+	m_AdaptiveFlag = TRUE;
+	}
 
-	//while(m_IterationNumber!= m_MaxIterationsCount)
-//	{
-	//	m_IterationNumber++;
-		// Your Code Here
-		m_RelativeError=0;
-	//	currentX += m_Step;    
-		//First Call the RK4 using the whole step
-		RK4Integrate(m_Step);
-		
-		//currentX-=m_Step;
-		tParticle* firstPrediction = new tParticle[m_ParticleCnt];
-
-		//tParticle* firsthalf = new tParticle[m_ParticleCnt];
-		tParticle* secondhalf = new tParticle[m_ParticleCnt];
-
-		//tParticle *iterator = m_TargetSys;
-		//Copy the Target System into one of the temp systems.
-		/*
-		for(int i=0;i<m_ParticleCnt;i++)
-			firstPrediction[i] = m_TargetSys[i];
-		*/
-		Copy(m_TargetSys,firstPrediction);
-		
-		//currentX += m_Step/2.0;   
-		//Then we make two calls with half the step
-		RK4Integrate(m_Step/2.0);
-		//currentX -= m_Step/2.0;
-		//currentX += m_Step; 
-		//Copy the Target System into one of the temp systems.
-		/*
-		for(int i=0;i<m_ParticleCnt;i++)
-			m_CurrentSys[i] = m_TargetSys[i];
-		*/
-		Copy(m_TargetSys,m_CurrentSys);
-
-		RK4Integrate(m_Step/2.0);
-		
-		//Copy the Target System into one of the temp systems.
-		Copy(m_TargetSys,secondhalf);
-		/*
-		for(int i=0;i<m_ParticleCnt;i++)
-			secondhalf[i] = m_TargetSys[i];
-		*/
-		//Then Calculate the error
-		tParticle* correction =  new tParticle[m_ParticleCnt];
-
-		//Copy the Target System into one of the temp systems.
-		for(int i=0;i<m_ParticleCnt;i++)
-		{
-			correction[i].pos.x = (secondhalf[i].pos.x - firstPrediction[i].pos.x)/15;
-			correction[i].pos.y = (secondhalf[i].pos.y - firstPrediction[i].pos.y)/15;
-			correction[i].pos.z = (secondhalf[i].pos.z - firstPrediction[i].pos.z)/15;
-
-			m_RelativeError+= fabs(correction[i].pos.x+ correction[i].pos.y + correction[i].pos.z);
-			
-			secondhalf[i].pos.x += correction[i].pos.x;
-			secondhalf[i].pos.y += correction[i].pos.y;
-			secondhalf[i].pos.z += correction[i].pos.z;
-		}
-		m_RelativeError/=m_ParticleCnt;
-
-		/*
-		for(int i=0;i<m_ParticleCnt;i++)
-			m_CurrentSys[i] = secondhalf[i] ;
-		*/
-	//	Copy(secondhalf,m_CurrentSys);
-		Copy(secondhalf,m_TargetSys);
-
-		//Check the relative error
-		if(m_RelativeError>EPSILON)
-			//Since We have a high error so it is more logical that we want to lower the step size
-			m_Step = m_Step * pow ((double) fabs (EPSILON / m_RelativeError), 0.25);
-		
-		if(m_RelativeError<ECON)
-			//So we will need to increase the step size
-			m_Step = m_Step * pow ((double) fabs (EPSILON / m_RelativeError), 0.2);
-
-		//currentX+=m_Step;
-
-	//	if(currentX>=DeltaTime)
-		//{
-			/*
-			for(int i=0;i<m_ParticleCnt;i++)
-				m_TargetSys[i] = secondhalf[i] ;*/
-			//Copy(secondhalf,m_TargetSys);
-		//	break;
-		//}
-		delete[] secondhalf;
-		delete[] firstPrediction;
-	
-
-	
-	
-	//m_IterationNumber=0;
-
+	RK4Integrate ( m_DeltaTimeAdaptive / 2.0f );
+	Copy (m_TargetSys, m_TempSys[0]);
+	RK4Integrate ( m_DeltaTimeAdaptive );
+	double Error =ErrorCalc (m_TempSys[0], m_TargetSys);
+    if (Error <0.00005);	
+	else if (Error > m_AdaptiveErrorThreshold)
+		m_DeltaTimeAdaptive = m_DeltaTimeAdaptive * pow ( m_AdaptiveErrorThreshold / Error ,m_AdaptiveDecreaseStepFactor);
+	else 
+		m_DeltaTimeAdaptive = m_DeltaTimeAdaptive * pow ( m_AdaptiveErrorThreshold / Error ,m_AdaptiveIncreaseStepFactor);
 }
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1374,6 +1310,7 @@ void CPhysEnv::Simulate(float DeltaTime, BOOL running, int HuenIterations, BOOL 
 			if (m_CollisionRootFinding)
 			{
 				EulerIntegrate(TargetTime-CurrentTime,  FALSE);
+				m_AdaptiveFlag = FALSE ;
 			}
 			else
 			{

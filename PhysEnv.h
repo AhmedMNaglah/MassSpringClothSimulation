@@ -131,7 +131,7 @@ private:
 	int					m_ContactCnt;			// COLLISION COUNT
 	tParticle			*m_ParticleSys[3];		// LIST OF PHYSICAL PARTICLES
 	tParticle			*m_CurrentSys,*m_TargetSys;
-	tParticle			*m_TempSys[5];			// SETUP FOR TEMP PARTICLES USED WHILE INTEGRATING
+	tParticle			*m_TempSys[7];			// SETUP FOR TEMP PARTICLES USED WHILE INTEGRATING
 	int					m_ParticleCnt;
 	tSpring				*m_Spring;				// VALID SPRINGS IN SYSTEM
 	int					m_SpringCnt;		

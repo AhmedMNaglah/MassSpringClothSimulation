@@ -37,7 +37,7 @@ CPhysEnv::CPhysEnv()
 	m_ParticleSys[1] = NULL;
 	m_ParticleSys[2] = NULL;	// RESET BUFFER
 	// THESE TEMP PARTICLE BUFFERS ARE NEEDED FOR THE MIDPOINT AND RK4 INTEGRATOR
-	for (int i = 0; i < 5; i++)
+	for (int i = 0; i < 7; i++)
 		m_TempSys[i] = NULL;
 	m_ParticleCnt = 0;
 	m_Contact = NULL;
@@ -142,7 +142,7 @@ double CPhysEnv::ErrorCalc (tParticle	* System1, tParticle	* System2)
 	System2 ++;
 	Error = Error / m_ParticleCnt;
 	std::ofstream log("log.txt", std::ios_base::app);
-	log << "\n    ErrorCalc: " << Error;
+	log << "\n    ErrorCalc Integrator Type " << m_IntegratorType << " : " << Error;
 	return Error;
 }
 void CPhysEnv::RenderWorld()
@@ -363,7 +363,7 @@ void CPhysEnv::SetWorldParticles(tTexturedVertex *coords,int particleCnt)
 	m_CurrentSys = (tParticle *)malloc(sizeof(tParticle) * particleCnt);
 	m_TargetSys = (tParticle *)malloc(sizeof(tParticle) * particleCnt);
 	m_ParticleSys[2] = (tParticle *)malloc(sizeof(tParticle) * particleCnt);
-	for (int i = 0; i < 5; i++)
+	for (int i = 0; i < 7; i++)
 	{
 		m_TempSys[i] = (tParticle *)malloc(sizeof(tParticle) * particleCnt);
 	}
@@ -455,7 +455,7 @@ void CPhysEnv::LoadData(FILE *fp)
 	m_CurrentSys = (tParticle *)malloc(sizeof(tParticle) * m_ParticleCnt);
 	m_TargetSys = (tParticle *)malloc(sizeof(tParticle) * m_ParticleCnt);
 	m_ParticleSys[2] = (tParticle *)malloc(sizeof(tParticle) * m_ParticleCnt);
-	for (int i = 0; i < 5; i++)
+	for (int i = 0; i < 7; i++)
 	{
 		m_TempSys[i] = (tParticle *)malloc(sizeof(tParticle) * m_ParticleCnt);
 	}
@@ -777,7 +777,8 @@ void CPhysEnv::EulerIntegrate( float DeltaTime, bool ErrorAnalys)
 {
 	// JUST TAKE A SINGLE STEP
 	IntegrateSysOverTime(m_CurrentSys,m_CurrentSys, m_TargetSys,DeltaTime);
-		if (ErrorAnalys)
+	
+	if (ErrorAnalys)
 	{
 	//Local Variables ///////////////////////////////////////////////////////////
 	float		halfDeltaT;
@@ -793,11 +794,8 @@ void CPhysEnv::EulerIntegrate( float DeltaTime, bool ErrorAnalys)
 	// TAKE THE FULL STEP WITH THIS NEW INFORMATION - Now use above slope for full-interval
 	IntegrateSysOverTime(m_TempSys[0],m_TempSys[0],m_TempSys[1],halfDeltaT);
 
-	// Evaluate the Estimated Error Using the Last Iteration
-	float Error = sqrt (pow (m_TempSys[1]-> pos.x - m_TargetSys ->pos.x , 2)+pow (m_TempSys[1]-> pos.y - m_TargetSys ->pos.y , 2)+pow (m_TempSys[1]-> pos.z - m_TargetSys ->pos.z , 2)) ;
 
-	std::ofstream log("log.txt", std::ios_base::app);
-	log << "\n    Error Euler : " << Error;
+	double Error = ErrorCalc(m_TargetSys, m_TempSys[1]);
 	}
 }
 
@@ -847,10 +845,8 @@ void CPhysEnv::MidPointIntegrate( float DeltaTime, bool ErrorAnalys)
 
 	IntegrateSysOverTime(m_TempSys[2],m_TempSys[3],m_TempSys[4],halfDeltaT);
 
-	float Error = sqrt (pow (m_TempSys[4]-> pos.x - m_TargetSys ->pos.x , 2)+pow (m_TempSys[4]-> pos.y - m_TargetSys ->pos.y , 2)+pow (m_TempSys[4]-> pos.z - m_TargetSys ->pos.z , 2));
-
-	std::ofstream log("log.txt", std::ios_base::app);
-	log << "\n    Error MidPoint : " << Error;
+	double Error = ErrorCalc(m_TargetSys, m_TempSys[4]);
+	
 	}
 }
 
@@ -892,12 +888,8 @@ void CPhysEnv::HeunIntegrate( float DeltaTime, int HuenIter,  bool ErrorAnalys)
 	IntegrateSysOverTime(m_CurrentSys,m_TempSys[1],m_TargetSys,DeltaTime);
 
 	if (ErrorAnalys)
-	{
-	// Evaluate the Estimated Error Using the Last Iteration
-	double Error = sqrt (pow (m_TempSys[1]-> pos.x - m_TargetSys ->pos.x , 2)+pow (m_TempSys[1]-> pos.y - m_TargetSys ->pos.y , 2)+pow (m_TempSys[1]-> pos.z - m_TargetSys ->pos.z , 2));
-
-	std::ofstream log("log.txt", std::ios_base::app);
-	log << "\n    Error Huen : " << Error;
+	{		// Evaluate the Estimated Error Using the Last Iteration
+	double Error = ErrorCalc(m_TargetSys, m_TempSys[1]);
 	}
 }
 
@@ -1019,97 +1011,24 @@ void CPhysEnv::IntegrateSysOverTime(tParticle *source,tParticle* k, float deltaT
 ///////////////////////////////////////////////////////////////////////////////
 void CPhysEnv::RK4Integrate( float DeltaTime)
 {
-	// Your Code Here
-/// Local Variables ///////////////////////////////////////////////////////////
-	float		halfDeltaT;
-///////////////////////////////////////////////////////////////////////////////
-	halfDeltaT = DeltaTime / 2.0f;
+	// k1 --> m_TempSys[1],
+	// k2 --> m_TempSys[2],
+	// k3 --> m_TempSys[3],
+	// k4 --> m_TempSys[4] 
 
-	// TAKE A HALF STEP AND UPDATE VELOCITY AND POSITION - Find y at half-interval
-	IntegrateSysOverTime(m_CurrentSys,m_TempSys[1],halfDeltaT);
-	tParticle* target, * source,*k1,*k2,*k3,*k4;
+	Copy (m_CurrentSys, m_TempSys[1] ); // K1 = CurrentSys
 
+	IntegrateSysOverTime(m_CurrentSys,m_CurrentSys,m_TempSys[2],DeltaTime / 2.0f);
+	ComputeForces (m_TempSys[2]); // K2
+	IntegrateSysOverTime(m_CurrentSys,m_TempSys[2],m_TempSys[3],DeltaTime / 2.0f);
+	ComputeForces (m_TempSys[3]); // K3
+	IntegrateSysOverTime(m_CurrentSys,m_TempSys[3],m_TempSys[4],DeltaTime ); // K4 
+	ComputeForces (m_TempSys[4]);
+
+	///
+		//From all those temp systems, get the final system
+	tParticle *k1,*k2,*k3,*k4,*target;
 	target = m_TempSys[0];
-	source = m_CurrentSys;
-	k1=m_TempSys[1];
-    ///////////////////////////////////////////////////////////////////////////////
-	for (int i  = 0; i < m_ParticleCnt; i++)
-	{
-		target->v.x = source->v.x + (k1->f.x);   
-        target->v.y = source->v.y + (k1->f.y);   
-        target->v.z = source->v.z + (k1->f.z);   
-   
-        target->oneOverM = source->oneOverM;   
-   
-        // SET THE NEW POSITION   
-        target->pos.x = source->pos.x + (k1->v.x);   
-        target->pos.y = source->pos.y + (k1->v.y);   
-        target->pos.z = source->pos.z + (k1->v.z);
-
-		source++;   
-        target++;
-		k1++;
-	}
-	// COMPUTE FORCES USING THESE NEW POSITIONS AND VELOCITIES - Compute slope at half-interval 
-	ComputeForces(m_TempSys[0]);
-
-	// TAKE THE FULL STEP WITH THIS NEW INFORMATION - Now use above slope for full-interval
-	IntegrateSysOverTime(m_TempSys[0],m_TempSys[2],halfDeltaT);
-	target = m_TempSys[0];
-	source = m_CurrentSys;
-	k1=m_TempSys[2];
-    ///////////////////////////////////////////////////////////////////////////////
-	for (int i  = 0; i < m_ParticleCnt; i++)
-	{
-		target->v.x = source->v.x + (k1->f.x);   
-        target->v.y = source->v.y + (k1->f.y);   
-        target->v.z = source->v.z + (k1->f.z);   
-   
-        target->oneOverM = source->oneOverM;   
-   
-        // SET THE NEW POSITION   
-        target->pos.x = source->pos.x + (k1->v.x);   
-        target->pos.y = source->pos.y + (k1->v.y);   
-        target->pos.z = source->pos.z + (k1->v.z);
-
-		source++;   
-        target++;
-		k1++;
-	}
-
-	// COMPUTE FORCES USING THESE NEW POSITIONS AND VELOCITIES - Compute slope at half-interval 
-	ComputeForces(m_TempSys[0]);
-	IntegrateSysOverTime(m_TempSys[0],m_TempSys[3],DeltaTime);
-	target = m_TempSys[0];
-	source = m_CurrentSys;
-	k1 = m_TempSys[3];
-    ///////////////////////////////////////////////////////////////////////////////
-	for (int i  = 0; i < m_ParticleCnt; i++)
-	{
-		target->v.x = source->v.x + (k1->f.x);   
-        target->v.y = source->v.y + (k1->f.y);   
-        target->v.z = source->v.z + (k1->f.z);   
-   
-        target->oneOverM = source->oneOverM;   
-   
-        // SET THE NEW POSITION   
-        target->pos.x = source->pos.x + (k1->v.x);   
-        target->pos.y = source->pos.y + (k1->v.y);   
-        target->pos.z = source->pos.z + (k1->v.z);
-
-		source++;   
-        target++;
-		k1++;
-
-	}
-
-	ComputeForces(m_TempSys[0]);
-	IntegrateSysOverTime(m_TempSys[0],m_TempSys[4],DeltaTime);
-	
-
-	//From all those temp systems, get the final system
-	target = m_TargetSys;
-	source = m_CurrentSys;
 	k1 = m_TempSys[1];
 	k2 = m_TempSys[2];   
     k3 = m_TempSys[3];   
@@ -1118,21 +1037,22 @@ void CPhysEnv::RK4Integrate( float DeltaTime)
 	float sixthDeltaT = 1.0f / 6.0f;   
 	for (int i = 0; i < m_ParticleCnt; i++)
 	{
-		
-		target->v.x = source->v.x + ((k1->f.x + ((k2->f.x + k3->f.x) * 2.0f) + k4->f.x) * sixthDeltaT);   
-        target->v.y = source->v.y + ((k1->f.y + ((k2->f.y + k3->f.y) * 2.0f) + k4->f.y) * sixthDeltaT);   
-        target->v.z = source->v.z + ((k1->f.z + ((k2->f.z + k3->f.z) * 2.0f) + k4->f.z) * sixthDeltaT);   
-        // DETERMINE THE NEW POSITION FOR THE PARTICLE USING RK4 FORMULA   
-        target->pos.x = source->pos.x + ((k1->v.x + ((k2->v.x + k3->v.x) * 2.0f) + k4->v.x) * sixthDeltaT);   
-        target->pos.y = source->pos.y + ((k1->v.y + ((k2->v.y + k3->v.y) * 2.0f) + k4->v.y) * sixthDeltaT);   
-        target->pos.z = source->pos.z + ((k1->v.z + ((k2->v.z + k3->v.z) * 2.0f) + k4->v.z) * sixthDeltaT);  
-		source++;
-		target++;
+		target->f.x = (k1->f.x + ((k2->f.x + k3->f.x) * 2.0f) + k4->f.x) * sixthDeltaT;   
+        target->f.y = (k1->f.y + ((k2->f.y + k3->f.y) * 2.0f) + k4->f.y) * sixthDeltaT;   
+        target->f.z = (k1->f.z + ((k2->f.z + k3->f.z) * 2.0f) + k4->f.z) * sixthDeltaT;   
+        
+        target->v.x = (k1->v.x + ((k2->v.x + k3->v.x) * 2.0f) + k4->v.x) * sixthDeltaT;   
+        target->v.y = (k1->v.y + ((k2->v.y + k3->v.y) * 2.0f) + k4->v.y) * sixthDeltaT;   
+        target->v.z = (k1->v.z + ((k2->v.z + k3->v.z) * 2.0f) + k4->v.z) * sixthDeltaT;
+		target ++;
 		k1++;
 		k2++;
 		k3++;
 		k4++;
 	}
+	
+	IntegrateSysOverTime(m_CurrentSys,m_TempSys[0],m_TargetSys,DeltaTime ); // K4 
+
 }
 
 
@@ -1167,16 +1087,26 @@ void CPhysEnv::RK4AdaptiveIntegrate( float DeltaTime)
 	m_DeltaTimeAdaptive = DeltaTime;
 	m_AdaptiveFlag = TRUE;
 	}
+	
 
-	RK4Integrate ( m_DeltaTimeAdaptive / 2.0f );
-	Copy (m_TargetSys, m_TempSys[0]);
 	RK4Integrate ( m_DeltaTimeAdaptive );
-	double Error =ErrorCalc (m_TempSys[0], m_TargetSys);
+	Copy (m_TargetSys, m_TempSys[5]); // Store Result of RK4 with Normal Step
+	RK4Integrate ( m_DeltaTimeAdaptive / 2.0f );
+	Copy (m_CurrentSys,m_TempSys[6]);
+	ComputeForces (m_TargetSys);
+	Copy (m_TargetSys, m_CurrentSys);
+	RK4Integrate ( m_DeltaTimeAdaptive / 2.0f ); // Store Result of RK4 with Half Step in TargetSys
+
+
+	double Error =ErrorCalc (m_TempSys[5], m_TargetSys);
     if (Error <0.00005);	
 	else if (Error > m_AdaptiveErrorThreshold)
 		m_DeltaTimeAdaptive = m_DeltaTimeAdaptive * pow ( m_AdaptiveErrorThreshold / Error ,m_AdaptiveDecreaseStepFactor);
 	else 
 		m_DeltaTimeAdaptive = m_DeltaTimeAdaptive * pow ( m_AdaptiveErrorThreshold / Error ,m_AdaptiveIncreaseStepFactor);
+	
+	Copy (m_TempSys[5], m_TargetSys);
+	Copy (m_TempSys[6], m_CurrentSys);
 }
 ///////////////////////////////////////////////////////////////////////////////
 
